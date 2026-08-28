@@ -1,33 +1,84 @@
+import { useMemo, useRef, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { startLogin } from "@/const";
+import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { Streamdown } from 'streamdown';
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "sonner";
+import { Film, Sparkles, Upload, Play, Pause, Plus, WandSparkles, Music2, Mic2, Type, Scissors, Download, CheckCircle2, Clock3, Settings2, LayoutDashboard, FolderOpen, ChevronLeft, MoreHorizontal, Image as ImageIcon, Layers3 } from "lucide-react";
 
-/**
- * All content in this page are only for example, replace with your own feature implementation
- * When building pages, remember your instructions in Frontend Workflow, Frontend Best Practices, Design Guide and Common Pitfalls
- */
+const demoScenes = [
+  { id: 1, title: "المقدمة — سؤال كبير", durationSeconds: 24, narration: "في كل قصة عظيمة، هناك سؤال يغيّر طريقة رؤيتنا للعالم.", visualText: "كيف تبدأ الحكاية؟", color: "from-cyan-400 to-blue-500", transition: "Dissolve" },
+  { id: 2, title: "الفصل الأول — الشرارة", durationSeconds: 48, narration: "تبدأ الشرارة حين يقرر الإنسان أن ينظر إلى المألوف بعين جديدة.", visualText: "الشرارة الأولى", color: "from-orange-300 to-rose-500", transition: "Wipe" },
+  { id: 3, title: "الفصل الثاني — المسار", durationSeconds: 72, narration: "كل خطوة تكشف طبقة جديدة، وكل اختيار يصنع مساراً مختلفاً.", visualText: "طريق من الاحتمالات", color: "from-teal-300 to-emerald-500", transition: "Fade" },
+  { id: 4, title: "الخاتمة — أثر باقٍ", durationSeconds: 36, narration: "وفي النهاية، لا يبقى من الرحلة سوى الأثر الذي تركناه في الآخرين.", visualText: "اترك أثراً", color: "from-violet-300 to-indigo-500", transition: "Dissolve" },
+];
+
 export default function Home() {
-  // The useAuth hook provides authentication state.
-  // To implement login/logout, call logout(), or start login from an event
-  // handler: onClick={() => startLogin()} (imported from "@/const"). Never call
-  // startLogin() during render (no href={startLogin()}) — it mints a one-time
-  // nonce cookie and must run only at the moment of navigation.
-  let { user, loading, error, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
+  const [activeScene, setActiveScene] = useState(1);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [projectTitle, setProjectTitle] = useState("رحلة إلى ما وراء المألوف");
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportProgress, setExportProgress] = useState(68);
+  const [notice, setNotice] = useState("جاهز للمعاينة");
+  const [quality, setQuality] = useState("1080p HD");
+  const [generated, setGenerated] = useState(false);
+  const { data: savedProjects } = trpc.projects.list.useQuery(undefined, { enabled: isAuthenticated });
+  const selectedProjectId = savedProjects?.[0]?.id ?? 1;
+  const { data: savedProject } = trpc.projects.get.useQuery({ id: selectedProjectId }, { enabled: isAuthenticated });
+  const scenes = savedProject?.scenes?.length ? savedProject.scenes.map((scene, i) => ({ ...scene, id: scene.id, color: demoScenes[i % demoScenes.length].color })) : demoScenes;
+  const currentScene = scenes.find(s => s.id === activeScene) ?? scenes[0];
+  const totalDuration = useMemo(() => 5400, []);
+  const createProject = trpc.projects.create.useMutation({ onSuccess: () => toast.success("تم إنشاء مشروع جديد") });
+  const addScene = trpc.projects.addScene.useMutation();
+  const requestExport = trpc.projects.requestExport.useMutation({ onSuccess: () => toast.success("أُضيفت مهمة التصدير إلى قائمة المعالجة"), onError: () => toast.error("سجّل الدخول لحفظ مهمة التصدير") });
+  const uploadAsset = trpc.projects.uploadAsset.useMutation({ onSuccess: () => toast.success("تم حفظ الوسيط وربطه بالمشروع"), onError: () => toast.error("تعذر رفع الملف") });
+  const fileInput = useRef<HTMLInputElement>(null);
+  const generateScript = trpc.projects.generateScript.useMutation({ onSuccess: (result) => { setGenerated(true); result.scenes?.slice(0, 24).forEach((scene: { title: string; durationSeconds: number; narration: string; visualText: string; transition: string }) => addScene.mutate({ projectId: selectedProjectId, title: scene.title, durationSeconds: scene.durationSeconds, narration: scene.narration, visualText: scene.visualText, transition: scene.transition })); toast.success("تم إعداد مخطط السيناريو وحفظ المشاهد"); }, onError: () => toast.error("سجّل الدخول لتفعيل التوليد الذكي") });
+  const generateImage = trpc.projects.generateImage.useMutation({ onSuccess: () => toast.success("تم إنشاء لوحة بصرية جديدة"), onError: () => toast.error("سجّل الدخول لتفعيل توليد الصور") });
 
-  // If theme is switchable in App.tsx, we can implement theme toggling like this:
-  // const { theme, toggleTheme } = useTheme();
+  const handleGenerate = () => {
+    if (!prompt.trim()) { toast.info("اكتب وصفاً قصيراً لفكرة الفيديو أولاً"); return; }
+    if (!isAuthenticated) { toast.info("سجّل الدخول لحفظ السيناريو وتوليده"); return; }
+    generateScript.mutate({ projectId: selectedProjectId, prompt, tone: "سينمائي تحليلي" });
+  };
 
-  return (
-    <div className="min-h-screen flex flex-col">
-      <main>
-        {/* Example: lucide-react for icons */}
-        <Loader2 className="animate-spin" />
-        Example Page
-        {/* Example: Streamdown for markdown rendering */}
-        <Streamdown>Any **markdown** content</Streamdown>
-        <Button variant="default">Example Button</Button>
-      </main>
-    </div>
-  );
+  const handleExport = () => {
+    setExportOpen(true); setNotice("جاري تجهيز ملفات التصدير"); setExportProgress(68);
+    if (isAuthenticated) requestExport.mutate({ projectId: selectedProjectId, quality: quality as "720p HD" | "4K UHD" | "720p HD", format: "MP4" });
+    window.setTimeout(() => { setExportProgress(100); setNotice("اكتمل التجهيز — الملف جاهز للتنزيل"); }, 1400);
+  };
+
+  const handleFile = (file?: File) => {
+    if (!file || !isAuthenticated) { toast.info("سجّل الدخول لرفع ملفات المشروع"); return; }
+    const reader = new FileReader(); reader.onload = () => uploadAsset.mutate({ projectId: selectedProjectId, name: file.name, mimeType: file.type || "application/octet-stream", dataBase64: String(reader.result) }); reader.readAsDataURL(file);
+  };
+
+  return <div dir="rtl" className="studio-shell min-h-screen bg-[#f7fbfc] text-slate-900">
+    <header className="topbar flex h-20 items-center justify-between border-b border-slate-200/80 bg-white/90 px-6 backdrop-blur-xl">
+      <div className="flex items-center gap-4"><div className="brand-mark"><Film size={21}/></div><div><p className="text-lg font-black tracking-tight">استوديو <span className="text-cyan-600">مدار</span></p><p className="text-[11px] font-bold text-slate-400">إنتاج بصري بذكاء واضح</p></div></div>
+      <div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-slate-50 p-1 md:flex"><button className="nav-pill active"><LayoutDashboard size={15}/> مساحة العمل</button><button className="nav-pill"><FolderOpen size={15}/> مشاريعي</button><button className="nav-pill"><Layers3 size={15}/> الأصول</button></div>
+      <div className="flex items-center gap-3"><Badge className="hidden border-cyan-200 bg-cyan-50 text-cyan-700 sm:flex"><span className="status-dot"/> مساحة تخزين 72%</Badge>{isAuthenticated ? <button onClick={() => logout()} className="avatar">{user?.name?.slice(0,1) ?? "م"}</button> : <Button onClick={() => startLogin()} variant="outline" className="rounded-xl">تسجيل الدخول</Button>}</div>
+    </header>
+
+    <main className="mx-auto grid max-w-[1500px] grid-cols-1 gap-6 p-5 lg:grid-cols-[250px_minmax(0,1fr)_330px]">
+      <aside className="order-2 space-y-5 lg:order-1"><div className="section-label">المشروع الحالي</div><div className="project-card"><div className="project-thumb"><div className="thumb-orbit"/><Film size={22}/><span>قيد التحرير</span></div><div className="mt-3 flex items-start justify-between"><div><h2 className="font-black">{projectTitle}</h2><p className="text-xs text-slate-400">آخر تعديل منذ 8 دقائق</p></div><MoreHorizontal size={18} className="text-slate-400"/></div></div><Button onClick={() => createProject.mutate({ title: "مشروع جديد", description: "فكرة جديدة لفيديو طويل" })} className="w-full rounded-xl bg-slate-900 py-6 font-black hover:bg-cyan-700"><Plus size={17}/> مشروع جديد</Button><div className="section-label mt-8">أدوات الإنتاج</div><div className="space-y-1">{([[Sparkles,"توليد بالذكاء الاصطناعي"],[Scissors,"قص وترتيب المشاهد"],[Mic2,"التعليق الصوتي"],[Music2,"الموسيقى والمؤثرات"],[Type,"النصوص والترجمة"]] as const).map(([Icon, label], i) => <button key={i} onClick={() => setNotice(`${label} — اختر مشهداً للبدء`)} className="tool-row"><Icon size={17}/><span>{label}</span><ChevronLeft size={14} className="mr-auto text-slate-300"/></button>)}</div><div className="mt-7 rounded-2xl bg-slate-900 p-4 text-white"><div className="flex items-center justify-between"><span className="text-xs text-slate-400">مدة المشروع</span><Clock3 size={16} className="text-cyan-300"/></div><p className="mt-2 text-2xl font-black">90 <span className="text-sm font-bold text-slate-400">دقيقة</span></p><Progress value={42} className="mt-3 h-1.5 bg-slate-700"/><p className="mt-2 text-[11px] text-slate-400">12:24 مستخدمة من المسار</p></div></aside>
+
+      <section className="order-1 min-w-0 lg:order-2"><div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow">مساحة العمل / مشروع طويل</p><div className="mt-1 flex items-center gap-3"><Input value={projectTitle} onChange={e => setProjectTitle(e.target.value)} className="h-10 w-[280px] border-0 bg-transparent px-0 text-2xl font-black shadow-none focus-visible:ring-0"/><Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">محفوظ</Badge></div></div><div className="flex gap-2"><Button variant="outline" onClick={() => setNotice("تم حفظ آخر تعديل")} className="rounded-xl"><CheckCircle2 size={16}/> حفظ</Button><Button onClick={handleExport} className="rounded-xl bg-cyan-600 font-black shadow-lg shadow-cyan-500/20 hover:bg-cyan-700"><Download size={16}/> تصدير الفيديو</Button></div></div>
+        <div className="preview-card relative overflow-hidden"><div className="preview-grid"/><div className={`preview-art bg-gradient-to-br ${currentScene.color}`}><div className="art-glow"/><div className="art-lines"/><div className="relative z-10 max-w-[460px] text-center"><p className="mb-3 text-xs font-black uppercase tracking-[.35em] text-white/70">المشهد {String(activeScene).padStart(2,"0")} / 24</p><h1 className="text-4xl font-black leading-tight text-white md:text-6xl">{currentScene.visualText}</h1><p className="mx-auto mt-4 max-w-sm text-sm leading-7 text-white/80">{currentScene.narration}</p></div></div><div className="preview-controls"><button onClick={() => setIsPlaying(v => !v)} className="play-button">{isPlaying ? <Pause size={18}/> : <Play size={18}/>}</button><div className="timeline-mini"><span>00:00</span><div className="timeline-track"><div className="timeline-fill"/></div><span>01:30:00</span></div><button onClick={() => setNotice("إعدادات المعاينة") } className="control-icon"><Settings2 size={17}/></button></div></div>
+        <div className="mt-5 flex items-center justify-between"><div><p className="section-label">خط زمني متعدد المسارات</p><p className="text-xs text-slate-400">اسحب المشاهد لترتيب الإيقاع السردي</p></div><div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => setNotice("تمت إضافة مشهد فارغ")} className="rounded-lg"><Plus size={15}/> إضافة مشهد</Button><input ref={fileInput} type="file" className="hidden" accept="image/*,video/*,audio/*" onChange={e => handleFile(e.target.files?.[0])}/><Button size="sm" variant="outline" onClick={() => fileInput.current?.click()} className="rounded-lg"><Upload size={15}/> رفع وسائط</Button></div></div>
+        <div className="timeline-panel mt-3"><div className="track-labels"><span>المشاهد</span><span>التعليق الصوتي</span><span>الموسيقى</span></div><div className="track-area"><div className="ruler"><span>00:00</span><span>00:15</span><span>00:30</span><span>00:45</span><span>01:00</span><span>01:15</span></div><div className="clip-row">{scenes.map(scene => <button key={scene.id} onClick={() => setActiveScene(scene.id)} className={`clip ${activeScene === scene.id ? "selected" : ""}`} style={{ width: `${scene.durationSeconds * 2.4 + 62}px` }}><span className="clip-index">{String(scene.id).padStart(2,"0")}</span><span className="truncate text-[11px] font-black">{scene.title}</span><span className="text-[10px] text-slate-400">{scene.durationSeconds}s</span></button>)}</div><div className="audio-row"><div className="waveform">{Array.from({length: 82}).map((_,i) => <i key={i} style={{height: `${18 + ((i*17)%25)}%`}}/>)}</div></div><div className="music-row"><div className="music-chip"><Music2 size={13}/> موسيقى — Horizon / Ambient <span>−12 dB</span></div></div></div></div>
+      </section>
+
+      <aside className="order-3 space-y-5"><Tabs defaultValue="generate" className="studio-tabs"><TabsList className="grid w-full grid-cols-3 rounded-xl bg-slate-100 p-1"><TabsTrigger value="generate">التوليد</TabsTrigger><TabsTrigger value="scenes">المشاهد</TabsTrigger><TabsTrigger value="export">التصدير</TabsTrigger></TabsList><TabsContent value="generate" className="mt-4 space-y-4"><Card className="glass-card p-5"><div className="flex items-center gap-2"><div className="icon-box cyan"><WandSparkles size={17}/></div><div><h3 className="font-black">حوّل الفكرة إلى فيلم</h3><p className="text-xs text-slate-400">سيناريو، مشاهد، تعليق، ولوحات بصرية</p></div></div><Textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="مثال: فيلم وثائقي عن المدن الذكية وتأثيرها على حياتنا..." className="mt-4 min-h-[110px] resize-none rounded-xl border-slate-200 bg-white/70 leading-7"/><div className="mt-3 flex gap-2"><Button onClick={handleGenerate} disabled={generateScript.isPending} className="flex-1 rounded-xl bg-slate-900 font-black hover:bg-cyan-700"><Sparkles size={15}/> {generateScript.isPending ? "جاري التوليد..." : "توليد المخطط"}</Button><Button onClick={() => generateImage.mutate({ prompt: prompt || "مشهد سينمائي مستقبلي" })} variant="outline" className="rounded-xl"><ImageIcon size={15}/></Button></div>{generated && <div className="mt-4 rounded-xl border border-cyan-100 bg-cyan-50 p-3 text-xs font-bold text-cyan-800">تم تجهيز مخطط أولي من الوصف، ويمكنك مراجعته وتعديل كل مشهد قبل الإنتاج.</div>}</Card><Card className="glass-card p-5"><div className="flex items-center justify-between"><div><p className="text-xs font-bold text-slate-400">حالة الإنتاج</p><h3 className="mt-1 font-black">{notice}</h3></div><div className="radar-dot"><span/></div></div><div className="mt-4 grid grid-cols-3 gap-2 text-center">{[["24","مشهد"],["90:00","المدة"],["1080p","الدقة"]].map(([v,l]) => <div className="metric" key={l}><strong>{v}</strong><span>{l}</span></div>)}</div></Card></TabsContent><TabsContent value="scenes" className="mt-4"><Card className="glass-card divide-y p-2">{scenes.map(scene => <button key={scene.id} onClick={() => setActiveScene(scene.id)} className={`scene-list ${activeScene === scene.id ? "active" : ""}`}><span className={`mini-thumb bg-gradient-to-br ${scene.color}`}>{String(scene.id).padStart(2,"0")}</span><span className="min-w-0 text-right"><strong className="block truncate text-sm">{scene.title}</strong><small>{scene.durationSeconds} ثانية · {scene.transition ?? "Dissolve"}</small></span><ChevronLeft size={15} className="mr-auto text-slate-300"/></button>)}</Card></TabsContent><TabsContent value="export" className="mt-4"><Card className="glass-card p-5"><h3 className="font-black">إعدادات التصدير</h3><p className="mt-1 text-xs leading-6 text-slate-400">يتم تجهيز الفيديو على مراحل مع الحفاظ على ترتيب المسارات.</p><label className="mt-4 block text-xs font-bold text-slate-500">جودة الصورة</label><select value={quality} onChange={e => setQuality(e.target.value)} className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold"><option>1080p HD</option><option>720p HD</option><option>4K UHD</option></select><Button onClick={handleExport} className="mt-4 w-full rounded-xl bg-cyan-600 font-black hover:bg-cyan-700"><Download size={15}/> بدء التصدير</Button></Card></TabsContent></Tabs></aside>
+    </main>
+    {exportOpen && <div className="export-drawer"><div className="flex items-center justify-between"><div><p className="eyebrow">تصدير {quality}</p><h3 className="text-lg font-black">جاري تجهيز الفيديو النهائي</h3></div><button onClick={() => setExportOpen(false)} className="text-slate-400">×</button></div><div className="mt-5 space-y-3">{[["تحليل المشاهد والمسارات", true],["تجهيز الصوت والترجمة", true],["ترميز الفيديو بجودة HD", exportProgress === 100]].map(([label, done]) => <div className="flex items-center gap-3 text-sm" key={String(label)}>{done ? <CheckCircle2 className="text-emerald-500" size={17}/> : <Clock3 className="text-cyan-500" size={17}/>}<span className={done ? "font-bold" : "text-slate-500"}>{label}</span></div>)}</div><Progress value={exportProgress} className="mt-5"/><div className="mt-2 flex justify-between text-xs font-bold text-slate-400"><span>{exportProgress}%</span><span>{exportProgress === 100 ? "جاهز" : "متبقٍ نحو 4 دقائق"}</span></div>{exportProgress === 100 && <Button className="mt-5 w-full rounded-xl bg-slate-900"><Download size={15}/> تنزيل MP4</Button>}</div>}
+  </div>;
 }

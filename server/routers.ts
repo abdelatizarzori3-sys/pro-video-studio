@@ -1,28 +1,39 @@
+import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { invokeLLM } from "./_core/llm";
+import { generateImage } from "./_core/imageGeneration";
+import { addAsset, addScene, createExport, createProject, getProject, listProjects } from "./db";
+import { storagePut } from "./storage";
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
-    }),
+    logout: publicProcedure.mutation(({ ctx }) => { const cookieOptions = getSessionCookieOptions(ctx.req); ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 }); return { success: true } as const; }),
   }),
-
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  projects: router({
+    list: protectedProcedure.query(({ ctx }) => listProjects(ctx.user.id)),
+    create: protectedProcedure.input(z.object({ title: z.string().min(1), description: z.string().optional() })).mutation(({ ctx, input }) => createProject(ctx.user.id, input.title, input.description)),
+    get: protectedProcedure.input(z.object({ id: z.number() })).query(({ ctx, input }) => getProject(ctx.user.id, input.id)),
+    addScene: protectedProcedure.input(z.object({ projectId: z.number(), title: z.string(), durationSeconds: z.number().min(1), narration: z.string().optional(), visualText: z.string().optional(), transition: z.string().optional() })).mutation(({ input }) => addScene(input.projectId, input)),
+    generateScript: protectedProcedure.input(z.object({ projectId: z.number(), prompt: z.string().min(10), tone: z.string().default("سينمائي") })).mutation(async ({ input }) => {
+      const response = await invokeLLM({ messages: [{ role: "system", content: "أنت كاتب سيناريو عربي محترف. أعد JSON فقط يضم title و logline و scenes، وكل مشهد يحوي title و durationSeconds و narration و visualText و visualPrompt و transition. اجعل مجموع المدة مناسباً لفيلم طويل حتى 90 دقيقة." }, { role: "user", content: `الوصف: ${input.prompt}\nالنبرة: ${input.tone}` }], response_format: { type: "json_schema", json_schema: { name: "video_script", strict: true, schema: { type: "object", properties: { title: { type: "string" }, logline: { type: "string" }, scenes: { type: "array", items: { type: "object", properties: { title: { type: "string" }, durationSeconds: { type: "integer" }, narration: { type: "string" }, visualText: { type: "string" }, visualPrompt: { type: "string" }, transition: { type: "string" } }, required: ["title", "durationSeconds", "narration", "visualText", "visualPrompt", "transition"], additionalProperties: false } } }, required: ["title", "logline", "scenes"], additionalProperties: false } } } });
+      return JSON.parse(String(response.choices?.[0]?.message?.content ?? "{}"));
+    }),
+    generateImage: protectedProcedure.input(z.object({ prompt: z.string().min(4) })).mutation(({ input }) => generateImage({ prompt: input.prompt, quality: "medium" })),
+    uploadAsset: protectedProcedure.input(z.object({ projectId: z.number(), sceneId: z.number().optional(), name: z.string().min(1), mimeType: z.string().min(1), dataBase64: z.string().min(20) })).mutation(async ({ ctx, input }) => {
+      const kind = input.mimeType.startsWith("image/") ? "image" : input.mimeType.startsWith("video/") ? "video" : input.mimeType.startsWith("audio/") ? "audio" : "other";
+      const safeName = input.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const buffer = Buffer.from(input.dataBase64.replace(/^data:[^;]+;base64,/, ""), "base64");
+      if (buffer.byteLength > 50 * 1024 * 1024) throw new Error("الملف أكبر من الحد المسموح 50MB");
+      const stored = await storagePut(`${ctx.user.id}-projects/${input.projectId}/${Date.now()}-${safeName}`, buffer, input.mimeType);
+      const assetId = await addAsset(ctx.user.id, input.projectId, { sceneId: input.sceneId, name: input.name, mimeType: input.mimeType, kind, storageKey: stored.key, url: stored.url });
+      return { assetId, url: stored.url };
+    }),
+    requestExport: protectedProcedure.input(z.object({ projectId: z.number(), quality: z.enum(["720p HD", "1080p HD", "4K UHD"]), format: z.enum(["MP4", "MOV", "WebM"]) })).mutation(({ ctx, input }) => createExport(ctx.user.id, input.projectId, input.quality, input.format)),
+  }),
 });
-
 export type AppRouter = typeof appRouter;
