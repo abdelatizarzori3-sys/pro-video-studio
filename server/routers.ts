@@ -5,7 +5,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { generateImage } from "./_core/imageGeneration";
-import { addAsset, addScene, createExport, getLatestExport, getProject, listProjects, reorderScenes, updateScene, updateSceneImage, createProject } from "./db";
+import { addAsset, addScene, createExport, createTimelineClip, getLatestExport, getProject, listProjects, listTimelineClips, reorderScenes, updateScene, updateSceneImage, updateTimelineClip, createProject } from "./db";
 import { storagePut } from "./storage";
 
 export const appRouter = router({
@@ -38,6 +38,9 @@ export const appRouter = router({
     }),
     requestExport: protectedProcedure.input(z.object({ projectId: z.number(), quality: z.enum(["720p HD", "1080p HD", "4K UHD"]), format: z.enum(["MP4", "MOV", "WebM"]) })).mutation(async ({ ctx, input }) => { const project = await getProject(ctx.user.id, input.projectId); if (!project) throw new Error("المشروع غير متاح للمستخدم الحالي"); return createExport(ctx.user.id, input.projectId, input.quality, input.format); }),
     latestExport: protectedProcedure.input(z.object({ projectId: z.number() })).query(({ ctx, input }) => getLatestExport(ctx.user.id, input.projectId)),
+    timelineClips: protectedProcedure.input(z.object({ projectId: z.number() })).query(async ({ ctx, input }) => { const project = await getProject(ctx.user.id, input.projectId); if (!project) throw new Error("المشروع غير متاح للمستخدم الحالي"); return listTimelineClips(ctx.user.id, input.projectId); }),
+    createTimelineClip: protectedProcedure.input(z.object({ projectId: z.number(), track: z.enum(["voice", "music"]), name: z.string().min(1), startSeconds: z.number().min(0).default(0), durationSeconds: z.number().min(1).default(30), volume: z.number().min(0).max(100).default(80), assetUrl: z.string().optional() })).mutation(async ({ ctx, input }) => { const project = await getProject(ctx.user.id, input.projectId); if (!project) throw new Error("المشروع غير متاح للمستخدم الحالي"); return createTimelineClip(ctx.user.id, input.projectId, input); }),
+    updateTimelineClip: protectedProcedure.input(z.object({ projectId: z.number(), clipId: z.number(), startSeconds: z.number().min(0).optional(), durationSeconds: z.number().min(1).optional(), volume: z.number().min(0).max(100).optional() })).mutation(async ({ ctx, input }) => { const project = await getProject(ctx.user.id, input.projectId); if (!project) throw new Error("المشروع غير متاح للمستخدم الحالي"); await updateTimelineClip(ctx.user.id, input.projectId, input.clipId, input); return { success: true as const }; }),
   }),
 });
 export type AppRouter = typeof appRouter;

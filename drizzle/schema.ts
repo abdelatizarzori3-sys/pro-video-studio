@@ -51,6 +51,20 @@ export const projectAssets = mysqlTable("project_assets", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const timelineClips = mysqlTable("timeline_clips", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  projectId: int("projectId").notNull(),
+  track: mysqlEnum("track", ["voice", "music"]).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  startSeconds: int("startSeconds").default(0).notNull(),
+  durationSeconds: int("durationSeconds").default(30).notNull(),
+  volume: int("volume").default(80).notNull(),
+  assetUrl: text("assetUrl"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export const exportJobs = mysqlTable("export_jobs", {
   id: int("id").autoincrement().primaryKey(),
   projectId: int("projectId").notNull(),
@@ -70,3 +84,4 @@ export type VideoProject = typeof videoProjects.$inferSelect;
 export type VideoScene = typeof videoScenes.$inferSelect;
 export type ProjectAsset = typeof projectAssets.$inferSelect;
 export type ExportJob = typeof exportJobs.$inferSelect;
+export type TimelineClip = typeof timelineClips.$inferSelect;

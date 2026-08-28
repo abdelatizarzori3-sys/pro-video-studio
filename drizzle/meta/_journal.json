@@ -15,6 +15,13 @@
       "when": 1787933286519,
       "tag": "0001_lowly_legion",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1787934758129,
+      "tag": "0002_tough_reaper",
+      "breakpoints": true
     }
   ]
 }

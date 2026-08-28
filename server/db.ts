@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, exportJobs, projectAssets, users, videoProjects, videoScenes } from "../drizzle/schema";
+import { InsertUser, exportJobs, projectAssets, timelineClips, users, videoProjects, videoScenes } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -35,3 +35,6 @@ export async function createExport(userId: number, projectId: number, quality: s
 export async function addAsset(userId: number, projectId: number, input: { name: string; storageKey: string; url: string; mimeType: string; kind: "image" | "video" | "audio" | "other"; sceneId?: number }) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const result = await db.insert(projectAssets).values({ userId, projectId, ...input }); return Number(result[0].insertId); }
 export async function updateSceneImage(projectId: number, sceneId: number, imageUrl: string) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); await db.update(videoScenes).set({ imageUrl }).where(and(eq(videoScenes.id, sceneId), eq(videoScenes.projectId, projectId))); }
 export async function getLatestExport(userId: number, projectId: number) { const db = await getDb(); if (!db) return null; const rows = await db.select().from(exportJobs).where(and(eq(exportJobs.userId, userId), eq(exportJobs.projectId, projectId))).orderBy(desc(exportJobs.createdAt)).limit(1); return rows[0] ?? null; }
+export async function listTimelineClips(userId: number, projectId: number) { const db = await getDb(); if (!db) return []; return db.select().from(timelineClips).where(and(eq(timelineClips.userId, userId), eq(timelineClips.projectId, projectId))).orderBy(timelineClips.startSeconds); }
+export async function createTimelineClip(userId: number, projectId: number, input: { track: "voice" | "music"; name: string; startSeconds?: number; durationSeconds?: number; volume?: number; assetUrl?: string }) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const result = await db.insert(timelineClips).values({ userId, projectId, ...input }); return Number(result[0].insertId); }
+export async function updateTimelineClip(userId: number, projectId: number, clipId: number, input: { startSeconds?: number; durationSeconds?: number; volume?: number }) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); await db.update(timelineClips).set(input).where(and(eq(timelineClips.id, clipId), eq(timelineClips.userId, userId), eq(timelineClips.projectId, projectId))); }
