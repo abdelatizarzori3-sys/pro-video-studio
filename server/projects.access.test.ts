@@ -29,7 +29,13 @@ describe("projects access", () => {
 
   it("normalizes clip volume to the 0-100 range", () => {
     expect(normalizeTimelineVolume(-20)).toBe(0);
+    expect(normalizeTimelineVolume(0)).toBe(0);
     expect(normalizeTimelineVolume(42.6)).toBe(43);
     expect(normalizeTimelineVolume(140)).toBe(100);
+  });
+
+  it("requires authentication to toggle clip mute", async () => {
+    const caller = appRouter.createCaller(anonymousContext());
+    await expect(caller.projects.updateTimelineClip({ projectId: 1, clipId: 101, volume: 0, muted: true })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 });

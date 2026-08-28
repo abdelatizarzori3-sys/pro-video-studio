@@ -1,0 +1,1 @@
+ALTER TABLE `timeline_clips` ADD `muted` int DEFAULT 0 NOT NULL;

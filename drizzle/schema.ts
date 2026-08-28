@@ -60,6 +60,7 @@ export const timelineClips = mysqlTable("timeline_clips", {
   startSeconds: int("startSeconds").default(0).notNull(),
   durationSeconds: int("durationSeconds").default(30).notNull(),
   volume: int("volume").default(80).notNull(),
+  muted: int("muted").default(0).notNull(),
   assetUrl: text("assetUrl"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

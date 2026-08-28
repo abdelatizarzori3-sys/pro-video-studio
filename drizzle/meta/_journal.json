@@ -22,6 +22,13 @@
       "when": 1787934758129,
       "tag": "0002_tough_reaper",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1787938121913,
+      "tag": "0003_chilly_blade",
+      "breakpoints": true
     }
   ]
 }
