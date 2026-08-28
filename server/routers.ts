@@ -5,7 +5,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { generateImage } from "./_core/imageGeneration";
-import { addAsset, addScene, createExport, createProject, getProject, listProjects } from "./db";
+import { addAsset, addScene, createExport, getLatestExport, getProject, listProjects, updateScene, updateSceneImage, createProject } from "./db";
 import { storagePut } from "./storage";
 
 export const appRouter = router({
@@ -18,13 +18,15 @@ export const appRouter = router({
     list: protectedProcedure.query(({ ctx }) => listProjects(ctx.user.id)),
     create: protectedProcedure.input(z.object({ title: z.string().min(1), description: z.string().optional() })).mutation(({ ctx, input }) => createProject(ctx.user.id, input.title, input.description)),
     get: protectedProcedure.input(z.object({ id: z.number() })).query(({ ctx, input }) => getProject(ctx.user.id, input.id)),
-    addScene: protectedProcedure.input(z.object({ projectId: z.number(), title: z.string(), durationSeconds: z.number().min(1), narration: z.string().optional(), visualText: z.string().optional(), transition: z.string().optional() })).mutation(({ input }) => addScene(input.projectId, input)),
+    addScene: protectedProcedure.input(z.object({ projectId: z.number(), title: z.string(), durationSeconds: z.number().min(1), narration: z.string().optional(), visualText: z.string().optional(), transition: z.string().optional() })).mutation(async ({ ctx, input }) => { const project = await getProject(ctx.user.id, input.projectId); if (!project) throw new Error("المشروع غير متاح للمستخدم الحالي"); return addScene(input.projectId, input); }),
+    updateScene: protectedProcedure.input(z.object({ projectId: z.number(), sceneId: z.number(), title: z.string().optional(), durationSeconds: z.number().min(1).optional(), narration: z.string().optional(), visualText: z.string().optional(), transition: z.string().optional() })).mutation(async ({ ctx, input }) => { const project = await getProject(ctx.user.id, input.projectId); if (!project || !project.scenes.some(scene => scene.id === input.sceneId)) throw new Error("المشهد غير متاح للمستخدم الحالي"); return updateScene(input.projectId, input.sceneId, input); }),
     generateScript: protectedProcedure.input(z.object({ projectId: z.number(), prompt: z.string().min(10), tone: z.string().default("سينمائي") })).mutation(async ({ input }) => {
       const response = await invokeLLM({ messages: [{ role: "system", content: "أنت كاتب سيناريو عربي محترف. أعد JSON فقط يضم title و logline و scenes، وكل مشهد يحوي title و durationSeconds و narration و visualText و visualPrompt و transition. اجعل مجموع المدة مناسباً لفيلم طويل حتى 90 دقيقة." }, { role: "user", content: `الوصف: ${input.prompt}\nالنبرة: ${input.tone}` }], response_format: { type: "json_schema", json_schema: { name: "video_script", strict: true, schema: { type: "object", properties: { title: { type: "string" }, logline: { type: "string" }, scenes: { type: "array", items: { type: "object", properties: { title: { type: "string" }, durationSeconds: { type: "integer" }, narration: { type: "string" }, visualText: { type: "string" }, visualPrompt: { type: "string" }, transition: { type: "string" } }, required: ["title", "durationSeconds", "narration", "visualText", "visualPrompt", "transition"], additionalProperties: false } } }, required: ["title", "logline", "scenes"], additionalProperties: false } } } });
       return JSON.parse(String(response.choices?.[0]?.message?.content ?? "{}"));
     }),
-    generateImage: protectedProcedure.input(z.object({ prompt: z.string().min(4) })).mutation(({ input }) => generateImage({ prompt: input.prompt, quality: "medium" })),
+    generateImage: protectedProcedure.input(z.object({ projectId: z.number(), sceneId: z.number().optional(), prompt: z.string().min(4) })).mutation(async ({ ctx, input }) => { const project = await getProject(ctx.user.id, input.projectId); if (!project) throw new Error("المشروع غير متاح للمستخدم الحالي"); const generated = await generateImage({ prompt: input.prompt, quality: "medium" }); if (input.sceneId && generated.url) await updateSceneImage(input.projectId, input.sceneId, generated.url); return generated; }),
     uploadAsset: protectedProcedure.input(z.object({ projectId: z.number(), sceneId: z.number().optional(), name: z.string().min(1), mimeType: z.string().min(1), dataBase64: z.string().min(20) })).mutation(async ({ ctx, input }) => {
+      const project = await getProject(ctx.user.id, input.projectId); if (!project) throw new Error("المشروع غير متاح للمستخدم الحالي"); if (input.sceneId && !project.scenes.some(scene => scene.id === input.sceneId)) throw new Error("المشهد غير متاح للمستخدم الحالي");
       const kind = input.mimeType.startsWith("image/") ? "image" : input.mimeType.startsWith("video/") ? "video" : input.mimeType.startsWith("audio/") ? "audio" : "other";
       const safeName = input.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       const buffer = Buffer.from(input.dataBase64.replace(/^data:[^;]+;base64,/, ""), "base64");
@@ -33,7 +35,8 @@ export const appRouter = router({
       const assetId = await addAsset(ctx.user.id, input.projectId, { sceneId: input.sceneId, name: input.name, mimeType: input.mimeType, kind, storageKey: stored.key, url: stored.url });
       return { assetId, url: stored.url };
     }),
-    requestExport: protectedProcedure.input(z.object({ projectId: z.number(), quality: z.enum(["720p HD", "1080p HD", "4K UHD"]), format: z.enum(["MP4", "MOV", "WebM"]) })).mutation(({ ctx, input }) => createExport(ctx.user.id, input.projectId, input.quality, input.format)),
+    requestExport: protectedProcedure.input(z.object({ projectId: z.number(), quality: z.enum(["720p HD", "1080p HD", "4K UHD"]), format: z.enum(["MP4", "MOV", "WebM"]) })).mutation(async ({ ctx, input }) => { const project = await getProject(ctx.user.id, input.projectId); if (!project) throw new Error("المشروع غير متاح للمستخدم الحالي"); return createExport(ctx.user.id, input.projectId, input.quality, input.format); }),
+    latestExport: protectedProcedure.input(z.object({ projectId: z.number() })).query(({ ctx, input }) => getLatestExport(ctx.user.id, input.projectId)),
   }),
 });
 export type AppRouter = typeof appRouter;
