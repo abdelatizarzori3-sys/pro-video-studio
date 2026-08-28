@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isTextEditingTarget, shouldToggleMute } from "./keyboardShortcuts";
+import { isTextEditingTarget, shouldToggleMute, shouldTogglePreview } from "./keyboardShortcuts";
 
 describe("timeline keyboard shortcuts", () => {
   it("toggles mute only for a selected clip and the M key", () => {
@@ -7,6 +7,13 @@ describe("timeline keyboard shortcuts", () => {
     expect(shouldToggleMute("M", 102, null)).toBe(true);
     expect(shouldToggleMute("x", 101, null)).toBe(false);
     expect(shouldToggleMute("m", null, null)).toBe(false);
+  });
+
+  it("toggles preview only for Space outside editable controls", () => {
+    expect(shouldTogglePreview(" ", null)).toBe(true);
+    expect(shouldTogglePreview("Enter", null)).toBe(false);
+    const input = { tagName: "INPUT", isContentEditable: false } as HTMLElement;
+    expect(shouldTogglePreview(" ", input)).toBe(false);
   });
 
   it("ignores editable controls", () => {

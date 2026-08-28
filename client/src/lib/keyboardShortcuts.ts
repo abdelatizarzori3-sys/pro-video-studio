@@ -7,3 +7,7 @@ export function isTextEditingTarget(target: EventTarget | null) {
 export function shouldToggleMute(key: string, selectedClipId: number | null, target: EventTarget | null) {
   return key.toLowerCase() === "m" && selectedClipId !== null && !isTextEditingTarget(target);
 }
+
+export function shouldTogglePreview(key: string, target: EventTarget | null) {
+  return key === " " && !isTextEditingTarget(target);
+}
