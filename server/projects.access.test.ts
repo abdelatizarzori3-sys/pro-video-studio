@@ -15,4 +15,9 @@ describe("projects access", () => {
     const caller = appRouter.createCaller(anonymousContext());
     await expect(caller.projects.list()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
+
+  it("requires authentication to reorder scenes", async () => {
+    const caller = appRouter.createCaller(anonymousContext());
+    await expect(caller.projects.reorderScenes({ projectId: 1, sceneIds: [1, 2] })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
 });
