@@ -6,6 +6,8 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { generateImage } from "./_core/imageGeneration";
 import { addAsset, addScene, createExport, createTimelineClip, getLatestExport, getProject, listProjects, listTimelineClips, reorderScenes, updateScene, updateSceneImage, updateTimelineClip, createProject } from "./db";
+import { getStoryboardExportAccess, requireStoryboardExportAccess } from "./entitlements";
+import { buildStoryboardDocument, renderStoryboardPrintReport, serializeStoryboardJson } from "./storyboard";
 import { storagePut } from "./storage";
 
 export const appRouter = router({
@@ -16,6 +18,20 @@ export const appRouter = router({
   }),
   projects: router({
     list: protectedProcedure.query(({ ctx }) => listProjects(ctx.user.id)),
+    storyboardExportStatus: protectedProcedure.query(({ ctx }) => getStoryboardExportAccess(ctx.user.id)),
+    exportStoryboard: protectedProcedure.input(z.object({ projectId: z.number().int().positive(), format: z.enum(["json", "print"]) })).mutation(async ({ ctx, input }) => {
+      const savedProject = await getProject(ctx.user.id, input.projectId);
+      if (!savedProject) throw new Error("المشروع غير متاح للمستخدم الحالي");
+      await requireStoryboardExportAccess(ctx.user.id);
+      const storyboard = buildStoryboardDocument({ project: savedProject.project, scenes: savedProject.scenes });
+      const isJson = input.format === "json";
+      return {
+        format: input.format,
+        filename: `storyboard-project-${savedProject.project.id}.${isJson ? "json" : "html"}`,
+        mimeType: isJson ? "application/json;charset=utf-8" : "text/html;charset=utf-8",
+        content: isJson ? serializeStoryboardJson(storyboard) : renderStoryboardPrintReport(storyboard),
+      };
+    }),
     create: protectedProcedure.input(z.object({ title: z.string().min(1), description: z.string().optional() })).mutation(({ ctx, input }) => createProject(ctx.user.id, input.title, input.description)),
     get: protectedProcedure.input(z.object({ id: z.number() })).query(({ ctx, input }) => getProject(ctx.user.id, input.id)),
     addScene: protectedProcedure.input(z.object({ projectId: z.number(), title: z.string(), durationSeconds: z.number().min(1), narration: z.string().optional(), visualText: z.string().optional(), transition: z.string().optional() })).mutation(async ({ ctx, input }) => { const project = await getProject(ctx.user.id, input.projectId); if (!project) throw new Error("المشروع غير متاح للمستخدم الحالي"); return addScene(input.projectId, input); }),
