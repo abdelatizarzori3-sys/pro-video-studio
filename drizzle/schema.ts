@@ -12,6 +12,20 @@ export const users = mysqlTable("users", {
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
+// Written only by a future, verified payment-webhook integration. There is no client mutation for this table.
+export const subscriptionEntitlements = mysqlTable("subscription_entitlements", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  provider: varchar("provider", { length: 64 }).notNull(),
+  providerCustomerId: varchar("providerCustomerId", { length: 255 }).notNull(),
+  providerSubscriptionId: varchar("providerSubscriptionId", { length: 255 }).notNull().unique(),
+  status: mysqlEnum("status", ["active", "cancelled", "expired", "past_due", "unpaid"]).notNull(),
+  currentPeriodEndsAt: timestamp("currentPeriodEndsAt").notNull(),
+  verifiedAt: timestamp("verifiedAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export const videoProjects = mysqlTable("video_projects", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
@@ -81,6 +95,7 @@ export const exportJobs = mysqlTable("export_jobs", {
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+export type SubscriptionEntitlement = typeof subscriptionEntitlements.$inferSelect;
 export type VideoProject = typeof videoProjects.$inferSelect;
 export type VideoScene = typeof videoScenes.$inferSelect;
 export type ProjectAsset = typeof projectAssets.$inferSelect;

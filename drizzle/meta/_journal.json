@@ -29,6 +29,13 @@
       "when": 1787938121913,
       "tag": "0003_chilly_blade",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1793436272899,
+      "tag": "0004_complete_fixer",
+      "breakpoints": true
     }
   ]
 }

@@ -1,12 +1,12 @@
-# استوديو مدار — إنتاج الفيديو الذكي
+# استوديو مدار — تخطيط الفيديو الذكي
 
-استوديو مدار هو تطبيق ويب عربي باتجاه RTL لإدارة مشاريع الفيديو الطويلة حتى 90 دقيقة. يجمع التطبيق بين كتابة السيناريو، تقسيم المشاهد، إعداد اللقطات والنصوص الظاهرة، ترتيب المسارات، المعاينة، التصدير بجودة HD، وحفظ أصول المشروع للمستخدمين المسجلين.
+استوديو مدار هو تطبيق ويب عربي باتجاه RTL لإدارة مرحلة ما قبل إنتاج مشاريع الفيديو الطويلة حتى 90 دقيقة. يجمع التطبيق بين كتابة السيناريو، تقسيم المشاهد، إعداد اللقطات والنصوص الظاهرة، ترتيب المسارات، المعاينة، وحفظ أصول المشروع للمستخدمين المسجلين.
 
 ## المزايا الحالية
 
-تتضمن الواجهة مساحة عمل إيزومترية حديثة بخلفية شبكية خفيفة، لوحة للمشروع الحالي، معاينة سينمائية للمشهد، خطاً زمنياً متعدد المسارات للمشاهد والتعليق الصوتي والموسيقى، وقائمة أدوات عربية واضحة. كما تتضمن تدفقاً لتوليد مخطط سيناريو من وصف المستخدم، وتوليد صور ثابتة من الأوصاف، وإعدادات تصدير 720p و1080p و4K مع مراحل تجهيز مرئية.
+تتضمن الواجهة مساحة عمل إيزومترية حديثة بخلفية شبكية خفيفة، لوحة للمشروع الحالي، معاينة سينمائية للمشهد، خطاً زمنياً متعدد المسارات للمشاهد والتعليق الصوتي والموسيقى، وقائمة أدوات عربية واضحة. كما تتضمن تدفقاً لتوليد مخطط سيناريو من وصف المستخدم وتوليد صور ثابتة من الأوصاف.
 
-يستخدم الخادم إجراءات tRPC محمية بالمصادقة لحفظ المشاريع والمشاهد وإعدادات التصدير. وتوجد نماذج قاعدة البيانات الخاصة بالمستخدمين والمشاريع والمشاهد والأصول ووظائف التصدير في `drizzle/schema.ts`. تُحفظ ملفات الوسائط عبر طبقة التخزين الآمنة، بينما تحفظ قاعدة البيانات المفاتيح والبيانات الوصفية فقط.
+يوفر **Storyboard Pro** تصديراً حقيقياً لمشاريع المستخدم إلى ملف JSON منظم وتقرير HTML قابل للطباعة. يتضمن الناتجان ترتيب المشاهد ومدتها ونصها والنص البصري والانتقال؛ ولا يتضمنان أصول المشروع أو روابطها أو ملف فيديو. يستخدم الخادم إجراءات tRPC محمية بالمصادقة لحفظ المشاريع والمشاهد والتحقق من الاستحقاق. وتوجد نماذج قاعدة البيانات الخاصة بالمستخدمين والمشاريع والمشاهد والأصول ووظائف التصدير في `drizzle/schema.ts`.
 
 ## التشغيل المحلي
 
@@ -37,6 +37,12 @@ pnpm drizzle-kit generate
 
 تتضمن الجداول الأساسية `video_projects` و`video_scenes` و`project_assets` و`export_jobs`، إضافة إلى جدول `users` المدمج مع تسجيل الدخول.
 
+## Storyboard Pro والاشتراك
+
+يبقى تصدير Storyboard مقفلاً افتراضياً. لا يقرأ العميل حالة الدفع من `localStorage` أو رابط أو زر واجهة؛ يتحقق الخادم من المستخدم المصادق عليه وملكية المشروع وسجل `subscription_entitlements` النشط وغير المنتهي. لا يوجد إجراء عام أو إداري يمنح الاستحقاق.
+
+لا يزال موصل الشراء داخل التطبيق معلقاً إلى أن يتحدد بلد التحصيل والمزود وقناة توزيع Android. إلى أن يكتمل ذلك، لا تضبط الخادم `STORYBOARD_SUBSCRIPTION_PROVIDER` ولا تظهر الواجهة نجاح شراء أو تفعيل يدوي. عند التكامل، يجب أن يتحقق معالج webhook خادمي من توقيع المزود ويخزن فقط معرفات العميل والاشتراك وحالته وتاريخ انتهائه بعد التحقق؛ لا تخزن بيانات بطاقة ولا تمنح الاستحقاق من العميل.
+
 ## رفع المشروع إلى GitHub
 
 أنشئ مستودعاً فارغاً في GitHub، ثم نفّذ من جذر المشروع:
@@ -54,7 +60,7 @@ git push -u origin main
 
 ## ملاحظات الإنتاج
 
-التطبيق الحالي يجهز تجربة الاستوديو وطبقات البيانات والتكاملات الذكية اللازمة. أما إنتاج ملف فيديو فعلي مدته 90 دقيقة فيتطلب خدمة ترميز/رندر خارجية أو عامل معالجة مخصصاً، لأن المتصفح وحده لا ينفذ عملية رندر طويلة وموثوقة. تدفق التصدير في الواجهة يعرض مراحل العملية وحالتها، ويمكن ربطه لاحقاً بخدمة رندر فعلية عبر إجراء خلفي أو طابور مهام.
+التطبيق الحالي يجهز تجربة الاستوديو وطبقات البيانات والتكاملات الذكية اللازمة. لا ينتج ملف MP4 أو MOV أو WebM. إنتاج ملف فيديو فعلي مدته 90 دقيقة يتطلب خدمة ترميز/رندر خارجية أو عامل معالجة مخصصاً، لأن المتصفح وحده لا ينفذ عملية رندر طويلة وموثوقة.
 
 ## البنية
 
@@ -64,6 +70,8 @@ git push -u origin main
 | `client/src/index.css` | الهوية البصرية RTL والأنماط الإيزومترية |
 | `server/routers.ts` | إجراءات المشاريع والتوليد والتصدير |
 | `server/db.ts` | استعلامات قاعدة البيانات |
+| `server/storyboard.ts` | بناء JSON وتقرير HTML قابل للطباعة دون أصول أو روابط |
+| `server/entitlements.ts` | تحقق اشتراك برو الخادمي الذي يفشل مغلقاً |
 | `drizzle/schema.ts` | نماذج البيانات |
 | `todo.md` | سجل المتطلبات والتنفيذ |
 
@@ -73,7 +81,7 @@ git push -u origin main
 
 ## English overview
 
-Madar Studio is an Arabic RTL web workspace for managing long-form video projects up to 90 minutes. It includes a multi-track scene timeline, cinematic preview, AI-assisted script planning, image generation, secure media storage, HD export settings, and authenticated project persistence.
+Madar Studio is an Arabic RTL pre-production workspace for managing long-form video projects up to 90 minutes. It includes a multi-track scene timeline, cinematic preview, AI-assisted script planning, image generation, secure media storage, authenticated project persistence, and a Pro-gated JSON/printable-HTML storyboard export.
 
 ### Quick start
 
@@ -89,4 +97,4 @@ The full-stack template uses React, Tailwind CSS, Express, tRPC, Drizzle, Manus 
 
 ### Production note
 
-The current product shell exposes the export workflow and persists export jobs. A real 90-minute render should be connected to a dedicated encoding service or background worker rather than performed inside a browser request.
+Storyboard Pro exports a project-owned JSON document and a self-contained printable HTML report. It does not render video or expose project asset URLs. The server-side subscription connector and in-app purchase flow remain pending provider, billing-country, and Android-distribution decisions; access is denied by default until a verified server-side entitlement exists. A real 90-minute render would require a dedicated encoding service or background worker rather than a browser request.

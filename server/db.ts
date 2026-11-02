@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, exportJobs, projectAssets, timelineClips, users, videoProjects, videoScenes } from "../drizzle/schema";
+import { InsertUser, exportJobs, projectAssets, subscriptionEntitlements, timelineClips, users, videoProjects, videoScenes } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -25,6 +25,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 }
 
 export async function getUserByOpenId(openId: string) { const db = await getDb(); if (!db) return undefined; const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1); return result[0]; }
+export async function getSubscriptionEntitlement(userId: number) { const db = await getDb(); if (!db) return undefined; const result = await db.select().from(subscriptionEntitlements).where(eq(subscriptionEntitlements.userId, userId)).limit(1); return result[0]; }
 export async function listProjects(userId: number) { const db = await getDb(); if (!db) return []; return db.select().from(videoProjects).where(eq(videoProjects.userId, userId)).orderBy(desc(videoProjects.updatedAt)); }
 export async function createProject(userId: number, title: string, description?: string) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const result = await db.insert(videoProjects).values({ userId, title, description, durationSeconds: 5400 }); const id = Number(result[0].insertId); await db.insert(videoScenes).values({ projectId: id, sceneIndex: 1, title: "المشهد الافتتاحي", durationSeconds: 18, narration: "ابدأ بقصة واضحة تمهّد لفكرة الفيلم.", visualText: "عنوان الفيلم" }); return id; }
 export async function getProject(userId: number, projectId: number) { const db = await getDb(); if (!db) return null; const projects = await db.select().from(videoProjects).where(and(eq(videoProjects.id, projectId), eq(videoProjects.userId, userId))).limit(1); if (!projects[0]) return null; const scenes = await db.select().from(videoScenes).where(eq(videoScenes.projectId, projectId)).orderBy(videoScenes.sceneIndex); const assets = await db.select().from(projectAssets).where(and(eq(projectAssets.projectId, projectId), eq(projectAssets.userId, userId))).orderBy(desc(projectAssets.createdAt)); return { project: projects[0], scenes, assets }; }
